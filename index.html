@@ -909,7 +909,7 @@ try {
   }
 
   function shouldUseRemoteReasoning() {
-    return isMobileDevice && !!getRemoteReasoningBase();
+    return !!getRemoteReasoningBase();
   }
 
   async function warmRemoteReasoning(force) {
@@ -2090,17 +2090,7 @@ try {
       mobileOpen('https://www.google.com/search?q=' + encodeURIComponent(target));
       return 'Opening search for '+target+'.';
     }
-    if (isReasoningQuery(text)) {
-      return await getModelOrSearchResponse(text);
-    }
-    if (text.split(' ').length > 1 || /(how|what|why|who|where|when|can you|explain)\b/i.test(text)) {
-      return "Ask that as a definition, strategy, daily improvement question, or direct action and I’ll keep it inside the right lane for you.";
-    }
-    var fb=["Could you be more specific? I can search, message, or set reminders.",
-      "I'm listening. Try asking me to look something up or message someone.",
-      "I'm ready. What would you like me to do?",
-      "Tell me what you need — I can search, email, call, or message anyone."];
-    return fb[Math.floor(Math.random()*fb.length)];
+    return await getModelOrSearchResponse(text);
   }
 
   async function handleSend(){

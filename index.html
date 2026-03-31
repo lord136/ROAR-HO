@@ -885,7 +885,7 @@ try {
   var firstLocalReplyDone = false;
   var MODEL_FALLBACK_MS = 20000;
   var defaultAnswerModel = 'Raghav Beta';
-  var REMOTE_REASONING_URL = window.RAGHAV_REMOTE_URL || '';
+  var REMOTE_REASONING_URL = window.RAGHAV_REMOTE_URL || 'https://ragh.onrender.com';
   var remoteWarmStarted = false;
   var modelConfigs = {
     'Raghav Beta': {
@@ -1292,6 +1292,7 @@ try {
   }
 
   function shouldUseLocalModel(text) {
+    if (shouldUseRemoteReasoning()) return false;
     return isReasoningQuery(text);
   }
 

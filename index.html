@@ -375,7 +375,7 @@ body[data-theme="light"] .suggest-chip:hover{background:rgba(8,17,31,.1);color:#
       <div class="perm-hero-wordmark">Raghav AI</div>
     </div>
     <div class="perm-kicker" id="permKicker">Experimental</div>
-    <h3 id="permTitle">Use Mobile+ for the price of a pastry 🍰</h3>
+    <h3 id="permTitle">Use Mobile+ for the price of a pastry</h3>
     <p id="permBody">Early access is just Rs 39. Quick actions, less app hopping, and one-line mobile moves prepared for you.</p>
     <div class="perm-points" id="permPoints">
       <div class="perm-point">
@@ -477,6 +477,9 @@ try {
 
 <!-- CONFETTI -->
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<!-- REMOTE REASONING URL -->
+<script>window.RAGHAV_REMOTE_URL = 'https://ragh.onrender.com';</script>
 
 <!-- MAIN APP -->
 <script>
@@ -880,6 +883,8 @@ try {
   var firstLocalReplyDone = false;
   var MODEL_FALLBACK_MS = 20000;
   var defaultAnswerModel = 'Raghav Beta';
+  var REMOTE_REASONING_URL = window.RAGHAV_REMOTE_URL || '';
+  var remoteWarmStarted = false;
   var modelConfigs = {
     'Raghav Beta': {
       status: 'Reasoning replies on your phone',
@@ -896,6 +901,60 @@ try {
   function haptic(ms){ try{navigator.vibrate(ms)}catch(e){} }
   var isMobileDevice = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(window.innerWidth, window.innerHeight) < 1025);
   var isLowMemoryMobile = isMobileDevice && typeof navigator.deviceMemory === 'number' && navigator.deviceMemory < 2;
+
+  function getRemoteReasoningBase() {
+    return String(window.RAGHAV_REMOTE_URL || REMOTE_REASONING_URL || '').trim().replace(/\/+$/, '');
+  }
+
+  function shouldUseRemoteReasoning() {
+    return isMobileDevice && !!getRemoteReasoningBase();
+  }
+
+  async function warmRemoteReasoning(force) {
+    var base = getRemoteReasoningBase();
+    if (!base) return false;
+    if (remoteWarmStarted && !force) return true;
+    remoteWarmStarted = true;
+    try {
+      await fetch(base + '/api/warm', {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-store',
+        keepalive: true
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function getRemoteReasoningResponse(text) {
+    var base = getRemoteReasoningBase();
+    if (!base) throw new Error('REMOTE_REASONING_NOT_CONFIGURED');
+    await warmRemoteReasoning();
+    var response = await fetch(base + '/api/reason', {
+      method: 'POST',
+      mode: 'cors',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        lane: 'reasoning',
+        platform: isMobileDevice ? 'mobile' : 'desktop'
+      })
+    });
+    var data = null;
+    try {
+      data = await response.json();
+    } catch (e) {}
+    if (!response.ok) {
+      var remoteError = new Error(data && data.error ? data.error : 'REMOTE_REASONING_FAILED');
+      remoteError.status = response.status;
+      throw remoteError;
+    }
+    if (!data || !data.answer) throw new Error('REMOTE_REASONING_EMPTY');
+    return String(data.answer || '').trim();
+  }
 
   function mobileOpen(url) {
     if (!url) return null;
@@ -1161,6 +1220,10 @@ try {
 
   function buildWorkingMessage() {
     if (!workingState) return '';
+
+    if (shouldUseRemoteReasoning()) {
+      return "Raghav Beta is connecting on the live server now so your answer can stay right here.";
+    }
 
     var progress = getLoadPercent();
     var textWarmupInFlight = !!(localGeneratorPromise || backgroundModelPreloadPromises[getEffectiveModel()] || backgroundModelPreloadPromises[defaultAnswerModel]);
@@ -1916,6 +1979,18 @@ try {
   }
 
   async function getModelOrSearchResponse(text) {
+    if (shouldUseRemoteReasoning()) {
+      try {
+        return await getRemoteReasoningResponse(text);
+      } catch (remoteError) {
+        var remoteSectorResult = await getSectorAnswer(text);
+        if (remoteSectorResult) {
+          return maybeAddPatienceLine(remoteSectorResult, Date.now() - 3201);
+        }
+        return "Raghav Beta is waking up on the live server right now. Keep this page open for a moment and ask again here.";
+      }
+    }
+
     try {
       return await getLocalModelResponse(text);
     } catch (e) {
@@ -2206,6 +2281,7 @@ try {
     startupWarmupStarted = true;
 
     if (isMobileDevice) {
+      warmRemoteReasoning();
       return;
     }
 
@@ -2313,6 +2389,12 @@ try {
   updateModelUI();
   updateMobileAgentUI();
   setTimeout(function(){ startBackgroundWarmup(); }, 1600);
+  window.addEventListener('pageshow', function() {
+    warmRemoteReasoning();
+  });
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') warmRemoteReasoning();
+  });
 
   chatIn.addEventListener('focus', function() {
     if (searchGuideSeen) updateSuggestions();

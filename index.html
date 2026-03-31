@@ -2091,6 +2091,15 @@ try {
     if (isReasoningQuery(text)) {
       return await getModelOrSearchResponse(text);
     }
+
+    // On mobile with Render server — send ANY unhandled question to live AI
+    if (isMobileDevice && getRemoteReasoningBase()) {
+      try {
+        return await getRemoteReasoningResponse(text);
+      } catch (e) {
+        // fall through to local fallback below
+      }
+    }
     if (text.split(' ').length > 1 || /(how|what|why|who|where|when|can you|explain)\b/i.test(text)) {
       return "Ask that as a definition, strategy, daily improvement question, or direct action and I’ll keep it inside the right lane for you.";
     }
